@@ -1,14 +1,12 @@
-
-use crate::{Str, feature::ParseStr};
+use crate::{feature::ParseStr, Str};
 
 #[derive(Debug)]
 pub struct Step<'a> {
     // invariant: literals.len() == variables.len() + 1;
     keyword: StepKeyword,
     literals: Vec<Str<'a>>,
-    variables: Vec<Str<'a>>
+    variables: Vec<Str<'a>>,
 }
-
 
 impl<'a> Step<'a> {
     pub fn arity(&self) -> usize {
@@ -28,7 +26,7 @@ impl<'a> Step<'a> {
         let (keyword, text) = input.split_once(" ")?;
         let keyword = StepKeyword::from_str(keyword.trim())?;
         let text = text.trim();
-        let mut tokens = text.split(|c| {c == '<' || c == '>'});
+        let mut tokens = text.split(|c| c == '<' || c == '>');
         let mut literals = vec![tokens.next()?];
         let mut variables = vec![];
         loop {
@@ -42,7 +40,7 @@ impl<'a> Step<'a> {
         Some(Step {
             keyword,
             literals,
-            variables
+            variables,
         })
     }
 }
@@ -54,7 +52,7 @@ pub enum StepKeyword {
     Then,
     And,
     But,
-    Bullet
+    Bullet,
 }
 
 impl StepKeyword {
@@ -79,12 +77,15 @@ pub enum FeatureItemKeyword {
 }
 
 impl<'a> ParseStr<'a> for FeatureItemKeyword {
-    fn from_str(input: &'a str) -> Option<Self> where Self: Sized {
+    fn from_str(input: &'a str) -> Option<Self>
+    where
+        Self: Sized,
+    {
         use FeatureItemKeyword::*;
         match input {
-             "Scenario" | "Example" => Some(Scenario),
-             "Scenario Outline" | "Scenario Template" => Some(ScenarioOutline),
-             _ => None
+            "Scenario" | "Example" => Some(Scenario),
+            "Scenario Outline" | "Scenario Template" => Some(ScenarioOutline),
+            _ => None,
         }
     }
 }
@@ -94,11 +95,14 @@ pub enum Keyword {
     Feature,
     FeatureItem(FeatureItemKeyword),
     Examples,
-    Step(StepKeyword)
+    Step(StepKeyword),
 }
 
 impl<'a> ParseStr<'a> for Keyword {
-    fn from_str(input: &str) -> Option<Self> where Self: Sized {
+    fn from_str(input: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
         use Keyword::*;
         if let Some(fik) = FeatureItemKeyword::from_str(input) {
             Some(FeatureItem(fik))
@@ -108,7 +112,7 @@ impl<'a> ParseStr<'a> for Keyword {
             match input {
                 "Feature" => Some(Feature),
                 "Examples" | "Scenarios" => Some(Examples),
-                _ => None
+                _ => None,
             }
         }
     }
