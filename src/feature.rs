@@ -58,7 +58,7 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
 
         let mut i_start = 1;
         let mut free_text = vec![];
-        while i_start < lines.len() && !line_begins_feature_item(dbg!(lines[i_start])) {
+        while i_start < lines.len() && !line_begins_feature_item(lines[i_start]) {
             println!("Yummy free text!");
             free_text.push(lines[i_start]);
             i_start += 1;
@@ -67,7 +67,7 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
         let mut items = vec![];
         while i_start < lines.len() {
             let mut i_end = i_start + 1;
-            while i_end < lines.len() && !line_begins_feature_item(dbg!(lines[i_end])) {
+            while i_end < lines.len() && !line_begins_feature_item(lines[i_end]) {
                 i_end += 1;
             }
             items.push(FeatureItem::from_lines(lines[i_start..i_end].iter().map(|x| *x))?);
@@ -134,7 +134,7 @@ impl<'a> ScenarioOutline<'a> {
                     break;
                 }
                 else {
-                    dbg!("Malformed 'Examples:' line:\n{}",line);
+                    eprintln!("Malformed 'Examples:' line:\n{}",line);
                     return None;
                 }
             }

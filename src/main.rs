@@ -142,11 +142,15 @@ Examples:
     }
 }
 
-fn main() {
+fn main_test() {
     test_given();
     test_load_step();
     test_load_scenario();
     test_load_scenario_outline();
     test_load_feature();
     println!("Yay!");
+}
+
+fn main() {
+    
 }

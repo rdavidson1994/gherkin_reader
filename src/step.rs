@@ -26,7 +26,7 @@ impl<'a> Step<'a> {
     pub fn from_str(input: Str<'a>) -> Option<Step<'a>> {
         let input = input.trim();
         let (keyword, text) = input.split_once(" ")?;
-        let keyword = StepKeyword::from_str(dbg!(keyword.trim()))?;
+        let keyword = StepKeyword::from_str(keyword.trim())?;
         let text = text.trim();
         let mut tokens = text.split(|c| {c == '<' || c == '>'});
         let mut literals = vec![tokens.next()?];
