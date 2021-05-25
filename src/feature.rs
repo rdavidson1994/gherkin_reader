@@ -4,7 +4,7 @@ use crate::{
     step::{FeatureItemKeyword, Keyword, Step},
     NUnit,
 };
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{bail, Context, Result};
 
 pub trait ParseTrimmedLines<'a> {
     fn from_lines(lines: impl Iterator<Item = &'a str>) -> Result<Self>

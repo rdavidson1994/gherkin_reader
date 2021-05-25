@@ -1,5 +1,5 @@
 use crate::{feature::ParseStr, Str};
-use anyhow::{bail, ensure, Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 
 #[derive(Debug)]
 pub struct Step<'a> {

@@ -1,8 +1,6 @@
-use std::{env, fs::{self}, io::Write, path::{Path, PathBuf}};
-use quote::quote;
+use std::{env, fs::{self}, io::Write, path::{Path}};
 
-use syn::parse::{Parse, ParseStream, Result as SynResult};
-use syn;
+
 use anyhow::{anyhow, Error, Result, Context};
 use feature::{Feature, FeatureItem, ParseStr};
 use glob::glob;
@@ -14,14 +12,6 @@ mod feature;
 mod step;
 
 type Str<'a> = &'a str;
-
-
-macro_rules! template {
-    ($tmp:tt, $($arg:tt)*) => {{
-        let res = format!(include_str!(#$tmp),$($arg)*);
-        res
-    }}
-}
 
 pub trait Language {
     type ArgTypes;
@@ -50,10 +40,29 @@ impl TestFramework for NUnit {
     type Lang = CSharp;
 }
 
+// macro_rules! include_err_file {
+//     ($fname:tt) => {{
+//         include_str!(concat!(stringify!(err),stringify!(/),stringify!($fname),stringify!(.),stringify!(txt)))
+//     }}
+// }
+
+// Include the file passed as the first argument,
+// interpret it as a format string, and format it
+// with the other provided arguments
+
+macro_rules! fmt_err {
+    ($fname:tt) => {{
+        format!(include_str!(concat!(stringify!(err),stringify!(/),stringify!($fname),stringify!(.),stringify!(txt))))
+    }};
+    ($fname:tt, $($fmtargs:expr),+) => {{
+        format!( include_str!(concat!(stringify!(err),stringify!(/),stringify!($fname),stringify!(.),stringify!(txt))), $($fmtargs),+ )
+    }};
+}
+
 pub struct NUnit;
 impl NUnit {
     fn interpret_arg(arg: Str) -> (String, CSType) {
-        let path = "errors/invalid/scenario.txt";
+        //let x = format!(err!("BAD_FILE"), 3);
         if let Ok(_integer) = arg.parse::<i64>() {
             (arg.to_owned(), CSType::Int64)
         } else if arg.starts_with("/") {
@@ -64,8 +73,8 @@ impl NUnit {
         {
             (String::new() + "@" + arg, CSType::String)
         } else {
-            let mut output = String::from("@\"");
-            let output = arg.split('"').fold(output, |a,b| a + "\"\"" + b);
+            let mut output = arg.split('"').fold(String::from("@\""), |a,b| a + "\"\"" + b);
+            output.push('"');
             (output, CSType::String)
         }
     }
@@ -104,7 +113,7 @@ fn test_load_step() -> Result<()> {
                 // pass
                 Ok(())
             }
-            (Err(err), Some(arity)) => Err(err),
+            (Err(err), Some(_arity)) => Err(err),
             (Ok(step), None) => Err({
                 anyhow!(
                     "Parsed a nonsensical input {} into this step: {:?}",
@@ -238,30 +247,39 @@ fn main() -> Result<()> {
     let mut success_count = 0;
     let mut failure_count = 0;
     let mut args = env::args_os().skip(1);
-    let input_path = Path::new(&args.next().expect("No input path given."));
+    let input_path_os = &args.next().context("No input path given.")?;
+    let input_path = input_path_os
+        .to_str()
+        .with_context(|| fmt_err!(inpath_not_utf8, input_path_os))?;
+    
     let output_dir = match args.next() {
         Some(os_str) => {
             Path::new(&os_str).to_owned()
         }
         None => {
-            let s = include_str!("errors/invalid/target_dir.txt");
-            env::current_dir().context(s)?
+            env::current_dir().context(fmt_err!(target_dir_undetermined))?
         }
     };
-    let output_dir = args.next();
-    for entry in glob("*") {
+    //let output_dir = args.next();
+    for entry in glob(input_path) {
         for path in entry {
             match path {
                 Ok(path) => {
-                    let name = &path.file_name().unwrap().to_str().unwrap();
-                    let content = fs::read_to_string(&path)?;
+                    if path.is_dir() {
+                        continue;
+                    }
+                    let name = &path.file_name()
+                        .context("Input file not found")?
+                        .to_str()
+                        .context("File path invalid utf-8")?;
+                    let content = fs::read_to_string(&path).context(fmt_err!(bad_infile, name))?;
                     // Trim utf-8 BOM, if present
                     let content = content.trim_start_matches("\u{FEFF}");
                     let feature = Feature::from_str(content);
                     match feature {
                         Ok(feature) => {
                             let mut w = fs::OpenOptions::new().create(true).write(true).open(
-                                r"C:\Users\rdavidson\Desktop\Features\".to_owned() + name + ".cs",
+                                output_dir.join((*name).to_owned() + ".cs"),
                             )?;
                             write!(w, "{}", feature.export(NUnit)).unwrap();
                             //println!("Successful parse :)");
