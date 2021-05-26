@@ -75,51 +75,50 @@ fn main_inner() -> Result<()> {
         &output_dir
     ))?;
     println!("{}", input_path);
-    for entry in glob(input_path).context(format!(
+    let paths = glob(input_path).context(format!(
         "Error evaluating paths for input pattern {}",
         input_path
-    )) {
-        for path in entry {
-            match path {
-                Ok(path) => {
-                    if path.is_dir() {
-                        continue;
-                    }
-                    let name = &path
-                        .file_name()
-                        .context("Input file not found")?
-                        .to_str()
-                        .context("File path contains invalid utf-8")?;
-                    let content = fs::read_to_string(&path)
-                        .context(format!("Could not read the following input file: {}", name))?;
-                    // Trim utf-8 BOM, if present
-                    let content = content.trim_start_matches("\u{FEFF}");
-                    let feature = Feature::from_str(content);
-                    match feature {
-                        Ok(feature) => {
-                            let mut w = fs::OpenOptions::new()
-                                .create(true)
-                                .write(true)
-                                .open(output_dir.join((*name).to_owned() + ".cs"))
-                                .context(format!("Failed to create output file for {}", name))?;
-                            write!(w, "{}", feature.export(NUnit)).unwrap();
-                            //println!("Successful parse :)");
-                            success_count += 1;
-                        }
-                        Err(error) => {
-                            fs::write(
-                                output_dir.join((*name).to_owned() + ".log"),
-                                format!("{:#}", error),
-                            )
-                            .context(format!("Error attempting to write log file for {}", name))?;
-                            failure_count += 1;
-                        }
-                    }
-                }
-                Err(path_err) => {
-                    eprintln!("{:?}", path_err);
-                    failure_count += 1;
-                }
+    ))?;
+    for path in paths {
+        if let Err(path_err) = path {
+            eprintln!("{:?}", path_err);
+            failure_count += 1;
+        }
+        else if let Ok(path) = path {
+            if path.is_dir() {
+                continue;
+            }
+            let name = &path
+                .file_name()
+                .context("Input file not found")?
+                .to_str()
+                .context("File path contains invalid utf-8")?;
+            let content = fs::read_to_string(&path)
+                .context(format!("Could not read the following input file: {}", name))?;
+
+            // Trim utf-8 BOM, if present
+            let content = content.trim_start_matches("\u{FEFF}");
+
+            let feature = Feature::from_str(content);
+            if let Ok(feature) = feature {
+                let mut w = fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .open(output_dir.join((*name).to_owned() + ".cs"))
+                .context(format!("Failed to create output file for {}", name))?;
+                write!(w, "{}", feature.export(NUnit)).unwrap();
+                success_count += 1;
+            }
+            else if let Err(error) = feature {
+                fs::write(
+                    output_dir.join((*name).to_owned() + ".log"),
+                    format!("{:#}", error),
+                )
+                .context(format!(
+                    "Error attempting to write error log for file `{}`",
+                    name
+                ))?;
+                failure_count += 1;
             }
         }
     }
