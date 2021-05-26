@@ -1,5 +1,8 @@
+use std::str;
+
 use crate::step::GherkinLine;
 use crate::step::GroupingKeyword;
+use crate::CSType;
 use crate::Export;
 use crate::Str;
 use crate::{step::Step, NUnit};
@@ -110,17 +113,17 @@ fn pascal(input: Str) -> String {
 impl<'a> Export<NUnit> for Feature<'a> {
     fn export(&self, _nunit: NUnit) -> String {
         let mut output = String::new();
-        output.push_str("[TestFixture]\n");
-        output.push_str("public class ");
-        output.push_str(&pascal(self.name));
-        output.push_str("\n");
-        output.push_str("{\n");
+        output += "[TestFixture]\n";
+        output += "public class ";
+        output += &pascal(self.name);
+        output += "\n";
+        output += "{\n";
 
         for item in &self.items {
-            output.push_str(&item.export(NUnit))
+            output += &item.export(NUnit);
         }
 
-        output.push_str("\n}");
+        output += "\n}";
         output
     }
 }
@@ -265,12 +268,12 @@ impl<'a> ParseTrimmedLines<'a> for Scenario<'a> {
 impl<'a> Export<NUnit> for Scenario<'a> {
     fn export(&self, _export_format: NUnit) -> String {
         let mut output = String::new();
-        output.push_str("   [Test]\n");
-        let x = format!("   public void {}()\n", pascal(self.name));
+        output.push_str("    [Test]\n");
+        let x = format!("    public void {}()\n", pascal(self.name));
         output.push_str(&x);
-        output.push_str("   {\n");
+        output.push_str("    {\n");
         output.push_str("\n");
-        output.push_str("   }\n");
+        output.push_str("    }\n");
         output
     }
 }
@@ -321,6 +324,18 @@ impl<'a> ParseTrimmedLines<'a> for ExampleBlock<'a> {
                     ExampleEntry(row) => {
                         let example_row = ExampleRow::from_str(row)
                             .context(format!("Failed to read example row : `{}`", row))?;
+
+                        if labels.entries.len() != example_row.entries.len() {
+                            bail!(
+                                "Encountered row of length {} in data table, \
+                                    which was not consistent with the number of \
+                                    labels ({}). The labels in question are: {:?}",
+                                example_row.entries.len(),
+                                labels.entries.len(),
+                                labels.entries
+                            )
+                        };
+
                         examples.push(example_row);
                     }
                     _ => {
@@ -426,40 +441,144 @@ impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
     }
 }
 
+fn calculate_arg_types(example_blocks: &[ExampleBlock]) -> Vec<CSType> {
+    let mut arg_types: Vec<CSType> = vec![];
+    let arg_count = match example_blocks.get(0) {
+        Some(block) => block.labels.entries.len(),
+        None => 0,
+    };
+
+    for i in 0..arg_count {
+        // Find the best type to use for argument i of this test method
+        let best_compatible_type = example_blocks
+            // Iterate over all "Examples:" blocks in this scenario outline
+            .iter()
+            // Lump all the example rows from each block together
+            .flat_map(|block| &block.examples)
+            .map(|row| {
+                row.entries
+                    // For each row, examine the ith entry
+                    .get(i)
+                    .map_or(
+                        // If it's absent, asume it's a string
+                        CSType::String,
+                        // Otherwise, calculate its type.
+                        |&arg| CSType::from(arg),
+                    )
+            })
+            // Combine all the calculated types
+            .reduce(|x, y| x.lowest_common_type(y))
+            // If no types were found (because the blocks were all empty)
+            // assume it is of type String.
+            .unwrap_or(CSType::String);
+
+        arg_types.push(best_compatible_type);
+    }
+    arg_types
+}
+
+impl NUnit {
+    fn escape_literal(&self, literal: &str, add_quotes: bool) -> String {
+        // Remove up to one backslash or forward slash from an unquoted literal, in that order of preference.
+        let literal = if let Some(stripped_of_backslash) = literal.strip_prefix('\\') {
+            stripped_of_backslash
+        } else if let Some(stripped_of_forward_slash) = literal.strip_prefix('/') {
+            stripped_of_forward_slash
+        } else {
+            literal
+        };
+        if add_quotes {
+            // When new wrapping quotes and @ are added to bare words,
+            // any contained quotes need to be doubled to avoid breaking
+            // the verbatime string.
+            format!("@\"{}\"", literal.replace('"', "\"\""))
+        } else {
+            format!("@{}", literal)
+        }
+    }
+    fn interpret_arg(&self, arg: &str, cs_type: CSType) -> String {
+        match cs_type {
+            CSType::Unknown => format!(
+                "0 /*gherkin_reader error: couldn't read argument `{}`*/",
+                arg
+            ),
+            CSType::Bool => {
+                let lowercase = arg.to_ascii_lowercase();
+                if lowercase == "true" {
+                    lowercase
+                } else {
+                    String::from("false")
+                }
+            }
+            CSType::Int64 => arg.to_owned(),
+            CSType::Double => arg.to_owned(),
+            CSType::String => {
+                let already_quoted = arg.starts_with('"')
+                    && arg.ends_with('"')
+                    && arg.chars().filter(|&x| x == '"').count() == 2;
+                let add_quotes = !already_quoted;
+                self.escape_literal(arg, add_quotes)
+            }
+        }
+    }
+    fn write_test_case(&self, arg_types: &[CSType], arg_strings: &[Str]) -> String {
+        let mut output = String::from("    [TestCase(");
+        let mut first = true;
+        for (&arg_type, &arg_string) in arg_types.iter().zip(arg_strings.iter()) {
+            if !first {
+                output += ", ";
+            }
+            output += &self.interpret_arg(arg_string, arg_type);
+            first = false;
+        }
+        output += ")]\n";
+        output
+    }
+}
 impl<'a> Export<NUnit> for ScenarioOutline<'a> {
-    fn export(&self, _export_format: NUnit) -> String {
+    fn export(&self, nunit: NUnit) -> String {
         let mut output = String::new();
+        let arg_types = calculate_arg_types(&self.example_blocks);
         for block in &self.example_blocks {
             for example in &block.examples {
-                output.push_str("   [TestCase(");
-                let mut first_arg = true;
-                for arg in &example.entries {
-                    if first_arg {
-                        first_arg = false;
-                    } else {
-                        output.push_str(", ");
-                    }
-                    output.push_str(arg)
-                }
-                output.push_str(")]\n");
+                let test_case = nunit.write_test_case(&arg_types, &example.entries);
+                output += &test_case;
             }
         }
-        let x = format!("   public void {}(", pascal(self.name));
-        output.push_str(&x);
-        let mut first_arg = true;
-        for arg in &self.example_blocks[0].labels.entries {
-            if first_arg {
-                first_arg = false;
-            } else {
+        output += &format!("    public void {}(", pascal(self.name));
+        for (i, arg) in self.example_blocks[0].labels.entries.iter().enumerate() {
+            if i != 0 {
                 output.push_str(", ");
             }
-            output.push_str("string ");
-            output.push_str(&pascal(arg))
+            output += arg_types.get(i).unwrap_or(&CSType::String).to_str();
+            output += " ";
+            output += &pascal(arg);
         }
-        output.push_str(")\n");
-        output.push_str("   {\n");
-        output.push_str("\n");
-        output.push_str("   }\n");
+        output += ")\n";
+        output += "    {\n";
+
+        for step in &self.steps {
+            let step_title = step
+                .literals
+                .iter()
+                .map(|&x| pascal(x))
+                .reduce(|x, y| x + &y)
+                .unwrap_or(String::from("[Emtpy step text?]"));
+            output += &format!(
+                "        // {kw:?}({title}(",
+                kw = step.keyword,
+                title = step_title
+            );
+            for (i, variable) in step.variables.iter().enumerate() {
+                if i != 0 {
+                    output += ", "
+                }
+                output += &pascal(variable);
+            }
+            output += "));\n";
+        }
+        output += "\n";
+        output += "    }\n";
         output
     }
 }

@@ -19,13 +19,51 @@ pub trait TestFramework {
 
 pub struct CSharp;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum CSType {
+    Unknown,
     Bool,
-    Int32,
     Int64,
     Double,
     String,
+}
+
+impl CSType {
+    fn lowest_common_type(self, other: CSType) -> CSType {
+        use CSType::*;
+        match (self, other) {
+            // Undetermined types remain undetermined until
+            // more info is available
+            (Unknown, Unknown) => Unknown,
+            // Any new information replaces an undetermined type
+            (Unknown, x) | (x, Unknown) => x,
+            // Calculated types remain in place unless contradicted
+            (x, y) if x == y => x,
+            // If a contradiction occurs, we default back to string
+            _ => String,
+        }
+    }
+    fn from(input: &str) -> CSType {
+        if input.parse::<i64>().is_ok() {
+            CSType::Int64
+        } else if input.parse::<f64>().is_ok() {
+            CSType::Double
+        } else if input.parse::<bool>().is_ok() {
+            CSType::Bool
+        } else {
+            CSType::String
+        }
+    }
+
+    fn to_str(self) -> &'static str {
+        match self {
+            CSType::Unknown => "object",
+            CSType::Bool => "bool",
+            CSType::Int64 => "long",
+            CSType::Double => "double",
+            CSType::String => "string",
+        }
+    }
 }
 
 impl Language for CSharp {
@@ -83,8 +121,7 @@ fn main_inner() -> Result<()> {
         if let Err(path_err) = path {
             eprintln!("{:?}", path_err);
             failure_count += 1;
-        }
-        else if let Ok(path) = path {
+        } else if let Ok(path) = path {
             if path.is_dir() {
                 continue;
             }
@@ -102,14 +139,13 @@ fn main_inner() -> Result<()> {
             let feature = Feature::from_str(content);
             if let Ok(feature) = feature {
                 let mut w = fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .open(output_dir.join((*name).to_owned() + ".cs"))
-                .context(format!("Failed to create output file for {}", name))?;
+                    .create(true)
+                    .write(true)
+                    .open(output_dir.join((*name).to_owned() + ".cs"))
+                    .context(format!("Failed to create output file for {}", name))?;
                 write!(w, "{}", feature.export(NUnit)).unwrap();
                 success_count += 1;
-            }
-            else if let Err(error) = feature {
+            } else if let Err(error) = feature {
                 fs::write(
                     output_dir.join((*name).to_owned() + ".log"),
                     format!("{:#}", error),

@@ -76,9 +76,9 @@ impl<'a> GherkinLine<'a> {
 
 #[derive(Debug)]
 pub struct Step<'a> {
-    keyword: StepKeyword,
-    literals: Vec<Str<'a>>,
-    variables: Vec<Str<'a>>,
+    pub(crate) keyword: StepKeyword,
+    pub(crate) literals: Vec<Str<'a>>,
+    pub(crate) variables: Vec<Str<'a>>,
 }
 
 impl<'a> Step<'a> {
