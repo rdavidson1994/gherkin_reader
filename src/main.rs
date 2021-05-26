@@ -9,19 +9,6 @@ use anyhow::{Context, Result};
 use feature::Feature;
 use glob::glob;
 
-// Interprets the first argument as a filepath src/err/___.txt,
-// includes it with include_str!, and formats it with the remaining
-// arguments. Don't make any sudden movements, it bites.
-#[macro_use]
-macro_rules! fmt_err {
-    ($fname:tt) => {{
-        format!(include_str!(concat!(stringify!(err),stringify!(/),stringify!($fname),stringify!(.),stringify!(txt))))
-    }};
-    ($fname:tt, $($fmtargs:expr),+) => {{
-        format!( include_str!(concat!(stringify!(err),stringify!(/),stringify!($fname),stringify!(.),stringify!(txt))), $($fmtargs),+ )
-    }};
-}
-
 mod feature;
 mod step;
 
@@ -72,13 +59,19 @@ fn main_inner() -> Result<()> {
     let mut failure_count = 0;
     let mut args = env::args_os().skip(1);
     let input_path_os = &args.next().context("No input path given.")?;
-    let input_path = input_path_os
-        .to_str()
-        .with_context(|| fmt_err!(inpath_not_utf8, input_path_os))?;
+    let input_path = input_path_os.to_str().with_context(|| {
+        format!(
+            "Non utf-8 input paths are not supported. Example: {:?}",
+            input_path_os
+        )
+    })?;
 
     let output_dir = match args.next() {
         Some(os_str) => Path::new(&os_str).to_owned(),
-        None => env::current_dir().context(fmt_err!(target_dir_undetermined))?,
+        None => env::current_dir().context(
+            "No output file provided, and the current working \
+            directory could not be determined due to an IO error.",
+        )?,
     };
     //let output_dir = args.next();
     println!("GOT HERE");
@@ -98,7 +91,8 @@ fn main_inner() -> Result<()> {
                         .context("Input file not found")?
                         .to_str()
                         .context("File path contains invalid utf-8")?;
-                    let content = fs::read_to_string(&path).context(fmt_err!(bad_infile, name))?;
+                    let content = fs::read_to_string(&path)
+                        .context(format!("Could not read the following input file: {}", name))?;
                     // Trim utf-8 BOM, if present
                     let content = content.trim_start_matches("\u{FEFF}");
                     let feature = Feature::from_str(content);

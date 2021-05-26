@@ -4,7 +4,6 @@ use crate::Export;
 use crate::Str;
 use crate::{step::Step, NUnit};
 use anyhow::{bail, Context, Result};
-use fmt_err;
 
 pub(crate) struct ParseOutcome<'a, T> {
     data: T,
@@ -242,8 +241,10 @@ impl<'a> ParseTrimmedLines<'a> for Scenario<'a> {
         let terminating_line = loop {
             match lines.next() {
                 Some(StepLine(kw, step_text)) => {
-                    let step = Step::new(kw, step_text)
-                        .context(fmt_err!(bad_step, kw, step_text, name))?;
+                    let step = Step::new(kw, step_text).context(format!(
+                        "Invalid step `{:?} {}` in scenario `{}`",
+                        kw, step_text, name
+                    ))?;
                     steps.push(step);
                 }
                 other_line => {
@@ -359,8 +360,10 @@ impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
         let line_after_steps = loop {
             match lines.next() {
                 Some(StepLine(kw, step_text)) => {
-                    let step = Step::new(kw, step_text)
-                        .context(fmt_err!(bad_step, kw, step_text, name))?;
+                    let step = Step::new(kw, step_text).context(format!(
+                        "Invalid step `{:?} {}` in scenario `{}`",
+                        kw, step_text, name
+                    ))?;
                     steps.push(step);
                 }
                 Some(tag_line @ Tags(_)) => {
