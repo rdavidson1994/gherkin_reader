@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::convert::AsRef;
 use std::str;
 
 use crate::step::GherkinLine;
@@ -44,12 +46,34 @@ pub trait ParseStr<'a> {
 
 #[derive(Debug)]
 pub struct ExampleRow<'a> {
-    pub entries: Vec<Str<'a>>,
+    pub entries: Vec<Cow<'a, str>>,
 }
 
 impl<'a> ExampleRow<'a> {
     pub fn from_str(input: Str<'a>) -> Result<Self> {
-        let mut entries = input.split('|').skip(1).map(str::trim).collect::<Vec<_>>();
+        let mut ever_escaped = false;
+        let mut escaping = false;
+        let mut entries = input
+            .split(|x| {
+                if x == '\\' {
+                    escaping = true;
+                    ever_escaped = true;
+                } else {
+                    escaping = false;
+                }
+                x == '|' && !escaping
+            })
+            .skip(1)
+            .map(|x| Cow::Borrowed(str::trim(x)))
+            .collect::<Vec<Cow<'a, str>>>();
+
+        if ever_escaped {
+            for entry in &mut entries {
+                if entry.contains("\\|") {
+                    *entry = Cow::Owned(entry.replace("\\|", "|"))
+                }
+            }
+        }
         entries.pop().with_context(|| {
             format!(
                 "This example row seems to be malformed, containing less than two pipes:\n{}",
@@ -96,6 +120,26 @@ impl<'a> Feature<'a> {
         Ok(parse_outcome.data)
     }
 }
+
+// fn camel(input: Str) -> String {
+//     let mut output = String::new();
+//     let mut iterator = input.split(|c: char| !c.is_alphanumeric());
+//     let first_word = if let Some(first_word) = iterator.next() {
+//         first_word
+//     } else {
+//         return String::from("");
+//     };
+//     output += first_word;
+//     for word in iterator {
+//         let mut chars = word.chars();
+//         if let Some(first_char) = chars.next() {
+//             let first_upper = first_char.to_uppercase();
+//             output.extend(first_upper);
+//             output.extend(chars);
+//         }
+//     }
+//     output
+// }
 
 fn pascal(input: Str) -> String {
     let mut output = String::new();
@@ -329,10 +373,13 @@ impl<'a> ParseTrimmedLines<'a> for ExampleBlock<'a> {
                             bail!(
                                 "Encountered row of length {} in data table, \
                                     which was not consistent with the number of \
-                                    labels ({}). The labels in question are: {:?}",
+                                    labels ({}).\n\
+                                    The labels in question are:\n{:?}\n\
+                                    The examples provided were:\n{:?}",
                                 example_row.entries.len(),
                                 labels.entries.len(),
-                                labels.entries
+                                labels.entries,
+                                example_row.entries
                             )
                         };
 
@@ -463,7 +510,7 @@ fn calculate_arg_types(example_blocks: &[ExampleBlock]) -> Vec<CSType> {
                         // If it's absent, asume it's a string
                         CSType::String,
                         // Otherwise, calculate its type.
-                        |&arg| CSType::from(arg),
+                        |arg| CSType::from(&arg),
                     )
             })
             // Combine all the calculated types
@@ -521,14 +568,18 @@ impl NUnit {
             }
         }
     }
-    fn write_test_case(&self, arg_types: &[CSType], arg_strings: &[Str]) -> String {
+    fn write_test_case<'a, S: AsRef<str>>(
+        &'a self,
+        arg_types: &'a [CSType],
+        arg_strings: impl Iterator<Item = S>,
+    ) -> String {
         let mut output = String::from("    [TestCase(");
         let mut first = true;
-        for (&arg_type, &arg_string) in arg_types.iter().zip(arg_strings.iter()) {
+        for (&arg_type, arg_string) in arg_types.iter().zip(arg_strings) {
             if !first {
                 output += ", ";
             }
-            output += &self.interpret_arg(arg_string, arg_type);
+            output += &self.interpret_arg(arg_string.as_ref(), arg_type);
             first = false;
         }
         output += ")]\n";
@@ -541,7 +592,7 @@ impl<'a> Export<NUnit> for ScenarioOutline<'a> {
         let arg_types = calculate_arg_types(&self.example_blocks);
         for block in &self.example_blocks {
             for example in &block.examples {
-                let test_case = nunit.write_test_case(&arg_types, &example.entries);
+                let test_case = nunit.write_test_case(&arg_types, example.entries.iter());
                 output += &test_case;
             }
         }

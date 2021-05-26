@@ -1,9 +1,9 @@
 use std::{env, fs, io::Write, path::PathBuf};
 
 use anyhow::{Context, Result};
+use argh::FromArgs;
 use feature::Feature;
 use glob::glob;
-use argh::FromArgs;
 mod feature;
 mod step;
 
@@ -17,7 +17,7 @@ struct Arguments {
     /// destination for output source files and logs.
     /// Defaults to ${cwd}/gherkin_output
     #[argh(positional)]
-    output_path: Option<PathBuf>
+    output_path: Option<PathBuf>,
 }
 
 type Str<'a> = &'a str;
@@ -106,7 +106,6 @@ fn main_inner(args: Arguments) -> Result<()> {
     let mut failure_count = 0;
     let input_path = args.input_pattern;
 
-
     let output_dir = match args.output_path {
         Some(path) => path,
         None => env::current_dir()
@@ -154,9 +153,10 @@ fn main_inner(args: Arguments) -> Result<()> {
                 success_count += 1;
             } else if let Err(error) = feature {
                 let display_path = path.to_str().unwrap_or("[[Non UTF-8 path]]");
+                let display_error = format!("{:#}", error).replace(':', ":\n");
                 fs::write(
                     output_dir.join((*name).to_owned() + ".log"),
-                    format!("{}\n{:#}", display_path, error),
+                    format!("{}\n\n{}", display_path, display_error),
                 )
                 .context(format!(
                     "Error attempting to write error log for file `{}`",
