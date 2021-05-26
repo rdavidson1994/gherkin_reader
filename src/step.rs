@@ -11,6 +11,7 @@ pub enum GroupingKeyword {
     //ScenarioTemplate, // synonym for ScenarioOutline
     Scenario,
     //Example, // synonym for Scenario
+    Background,
     Examples,
     //Scenarios, // synonym for Examples
     Feature,
@@ -40,6 +41,7 @@ impl<'a> GherkinLine<'a> {
                     return BeginGroup(ScenarioOutline, title)
                 }
                 "Feature" => return BeginGroup(Feature, title),
+                "Background" => return BeginGroup(Background, title),
                 _ => {
                     // Let any other data fall through to other cases
                 }
@@ -143,6 +145,7 @@ impl StepKeyword {
 pub enum FeatureItemKeyword {
     Scenario,
     ScenarioOutline,
+    Background
 }
 
 impl<'a> ParseStr<'a> for FeatureItemKeyword {
@@ -152,6 +155,7 @@ impl<'a> ParseStr<'a> for FeatureItemKeyword {
     {
         use FeatureItemKeyword::*;
         match input {
+            "Background" => Ok(Background),
             "Scenario" | "Example" => Ok(Scenario),
             "Scenario Outline" | "Scenario Template" => Ok(ScenarioOutline),
             _ => bail!(

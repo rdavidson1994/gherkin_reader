@@ -109,6 +109,7 @@ pub struct Feature<'a> {
     pub name: Str<'a>,
     pub free_text: Vec<Str<'a>>,
     pub items: Vec<FeatureItem<'a>>,
+    pub background: Option<Scenario<'a>>
 }
 
 impl<'a> Feature<'a> {
@@ -207,6 +208,7 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
         Self: Sized,
     {
         // First, read free text description
+        let mut background = None;
         let mut free_text = vec![];
         let (mut group_kw, mut group_name) = loop {
             match lines
@@ -250,6 +252,24 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
                     items.push(FeatureItem::Bare(data));
                     next_line
                 }
+                GroupingKeyword::Background => {
+                    let ParseOutcome { data, next_line } =
+                        Scenario::from_lines(group_name, &mut lines)?;
+                    background = match background {
+                        None => Some(data),
+                        Some(existing) => {
+                            bail!(
+                                "While parsing Feature `{feature}`, encountered \
+                                Background `{background} - but another background \
+                                (`{existing}`) was already declared for that feature.",
+                                feature = name,
+                                background = data.name,
+                                existing = existing.name
+                            )
+                        }
+                    };
+                    next_line
+                }
                 _ => {
                     bail!(
                         "Unexpected keyword at top level of feature: `_{:?}_ {}`",
@@ -286,6 +306,7 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
             name,
             free_text,
             items,
+            background,
         };
 
         ok_parsed(feature, None)
