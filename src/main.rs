@@ -70,9 +70,12 @@ fn main_inner() -> Result<()> {
             )?
             .join("gherkin_output"),
     };
+    fs::create_dir_all(&output_dir).context(format!(
+        "Could not create output directory: {:?}", &output_dir
+    ))?;
     println!("{}", input_path);
     for entry in glob(input_path).context(format!(
-        "Error evaluation paths for input pattern {}",
+        "Error evaluating paths for input pattern {}",
         input_path
     )) {
         for path in entry {
