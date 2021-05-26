@@ -58,17 +58,6 @@ impl<'a> ExampleRow<'a> {
     }
 }
 
-// pub struct ExampleTable<'a> {
-//     labels: Vec<Str<'a>>,
-//     examples: Vec<ExampleRow<'a>>
-// }
-
-// impl<'a> ExampleTable<'a> {
-//     pub(crate) fn invariant(&self) -> bool {
-//         self.examples.iter().all(|example| example.entries.len() == self.labels.len() )
-//     }
-// }
-
 #[derive(Debug)]
 pub struct Feature<'a> {
     pub name: Str<'a>,
@@ -182,11 +171,10 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
             let line = match group_kw {
                 GroupingKeyword::ScenarioOutline => {
                     let ParseOutcome { data, next_line } =
-                        ScenarioOutline::from_lines(group_name, &mut lines)?;
-                    // .context(format!(
-                    //     "Failed to parse Scenario Outline `{}` in feature {}`",
-                    //     group_name, name
-                    // ))?;
+                        ScenarioOutline::from_lines(group_name, &mut lines).context(format!(
+                            "Failed to parse Scenario Outline `{}` in feature {}`",
+                            group_name, name
+                        ))?;
                     items.push(FeatureItem::Outline(data));
                     next_line
                 }
@@ -473,27 +461,6 @@ impl<'a> Export<NUnit> for ScenarioOutline<'a> {
     }
 }
 
-// impl<'a> ParseTrimmedLines<'a> for FeatureItem<'a> {
-//     fn from_lines(mut lines: impl Iterator<Item = &'a str>) -> Result<Self> {
-//         let (keyword, rest) = lines
-//             .next()
-//             .context("Attempted to read a feature item from an empty set of lines")?
-//             .split_once(":")
-//             .context("First entry of feature item was expected to contain a colon.")?;
-//         let keyword = keyword.trim();
-//         let name = rest.trim();
-//         let output = match FeatureItemKeyword::from_str(keyword)? {
-//             FeatureItemKeyword::Scenario => {
-//                 FeatureItem::Bare(Scenario::from_lines(name, lines)?)
-//             }
-//             FeatureItemKeyword::ScenarioOutline => {
-//                 FeatureItem::Outline(ScenarioOutline::from_lines(name, lines)?)
-//             }
-//         };
-//         Ok(output)
-//     }
-// }
-
 impl<'a, T> Export<T> for FeatureItem<'a>
 where
     Scenario<'a>: Export<T>,
@@ -506,13 +473,3 @@ where
         }
     }
 }
-
-// impl<'a> Scenario<'a> {
-//     fn from_lines(name: Str<'a>, lines: impl Iterator<Item = &'a str>) -> Result<Self>
-//     where
-//         Self: Sized,
-//     {
-//         let steps = parse_step_list(lines)?;
-//         Ok(Scenario { name, steps })
-//     }
-// }
