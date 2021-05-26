@@ -85,26 +85,26 @@ pub struct Step<'a> {
 
 impl<'a> Step<'a> {
     pub fn new(keyword: StepKeyword, input: Str<'a>) -> Result<Step<'a>> {
-        let text = input.trim();
-        let text = text.trim();
-        let mut tokens = text.split(|c| c == '<' || c == '>');
-        let mut literals = vec![tokens.next().with_context(|| {
-            format!(
-                "Step content appears empty after splitting angle brackets and trimming: `{}`",
-                input
-            )
-        })?];
+        let mut remaining_text = input.trim();
+        let mut literals = vec![];
         let mut variables = vec![];
         loop {
-            if let Some(variable) = tokens.next() {
-                variables.push(variable);
-                literals.push(tokens.next().with_context(|| {
+            if let Some((literal, text)) = remaining_text.split_once('<') {
+                remaining_text = text;
+                literals.push(literal);
+                let (variable, text) = remaining_text.split_once('>').with_context(|| {
                     format!(
-                        "Step ends with unterminated variable expression : {}",
-                        input
+                        "Step the following step: \n\
+                        `{step}`\n\
+                        ends with an unterminated variable expression{}\n\
+                        `{expression}`",
+                        step = input, expression=remaining_text
                     )
-                })?);
+                })?;
+                remaining_text = text;
+                variables.push(variable);
             } else {
+                literals.push(remaining_text);
                 break;
             }
         }
