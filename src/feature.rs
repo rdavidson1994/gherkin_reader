@@ -51,26 +51,46 @@ pub struct ExampleRow<'a> {
 
 impl<'a> ExampleRow<'a> {
     pub fn from_str(input: Str<'a>) -> Result<Self> {
+        // Record whether any escapes occurred, so that we
+        // can go back and replace them.
         let mut ever_escaped = false;
+        // Record whether we are escaping the next character,
+        // so we can enclose this in the following closure
         let mut escaping = false;
         let mut entries = input
+            // For each character, determine if we should split
+            // based on the following critieria:
             .split(|x| {
-                if x == '\\' {
+                if escaping {
+                    // If we decided previously to escape the next char,
+                    // do not split. Set escaping to falso so only *one*
+                    // char is escaped.
+                    escaping = false;
+                    false
+                } else if x == '\\' {
+                    // If we encounter an unescaped backslash,
+                    // begin escaping and don't split.
                     escaping = true;
                     ever_escaped = true;
+                    false
+                } else if x == '|' {
+                    // If we encounter an unescaped pipe, split.
+                    true
                 } else {
-                    escaping = false;
+                    // Otherwise don't split.
+                    false
                 }
-                x == '|' && !escaping
             })
             .skip(1)
             .map(|x| Cow::Borrowed(str::trim(x)))
             .collect::<Vec<Cow<'a, str>>>();
 
+        // If we escaped at any point, go back and correct each affected segment
+        // so that it contains the unescaped version.
         if ever_escaped {
             for entry in &mut entries {
                 if entry.contains("\\|") {
-                    *entry = Cow::Owned(entry.replace("\\|", "|"))
+                    *entry = Cow::Owned(entry.replace("\\|", "|"));
                 }
             }
         }
