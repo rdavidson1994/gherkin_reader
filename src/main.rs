@@ -1,11 +1,24 @@
-use std::{env, fs, io::Write, path::Path};
+use std::{env, fs, io::Write, path::PathBuf};
 
 use anyhow::{Context, Result};
 use feature::Feature;
 use glob::glob;
-
+use argh::FromArgs;
 mod feature;
 mod step;
+
+/// Convert gherkin files to .cs source files.
+#[derive(FromArgs)]
+struct Arguments {
+    /// pattern to match feature files.
+    /// For example, src/tests/*/features/*.feature
+    #[argh(positional)]
+    input_pattern: String,
+    /// destination for output source files and logs.
+    /// Defaults to ${cwd}/gherkin_output
+    #[argh(positional)]
+    output_path: Option<PathBuf>
+}
 
 type Str<'a> = &'a str;
 
@@ -81,26 +94,21 @@ pub trait Export<T> {
 }
 
 fn main() {
-    let outcome = main_inner().context("Fatal error");
+    let args = argh::from_env();
+    let outcome = main_inner(args).context("Fatal error");
     if let Err(e) = outcome {
         eprintln!("{:#}", e);
     }
 }
 
-fn main_inner() -> Result<()> {
+fn main_inner(args: Arguments) -> Result<()> {
     let mut success_count = 0;
     let mut failure_count = 0;
-    let mut args = env::args_os().skip(1);
-    let input_path_os = &args.next().context("No input path given.")?;
-    let input_path = input_path_os.to_str().with_context(|| {
-        format!(
-            "Non utf-8 input paths are not supported. Example: {:?}",
-            input_path_os
-        )
-    })?;
+    let input_path = args.input_pattern;
 
-    let output_dir = match args.next() {
-        Some(os_str) => Path::new(&os_str).to_owned(),
+
+    let output_dir = match args.output_path {
+        Some(path) => path,
         None => env::current_dir()
             .context(
                 "No output file provided, and the current working \
@@ -112,8 +120,7 @@ fn main_inner() -> Result<()> {
         "Could not create output directory: {:?}",
         &output_dir
     ))?;
-    println!("{}", input_path);
-    let paths = glob(input_path).context(format!(
+    let paths = glob(&input_path).context(format!(
         "Error evaluating paths for input pattern {}",
         input_path
     ))?;
@@ -146,9 +153,10 @@ fn main_inner() -> Result<()> {
                 write!(w, "{}", feature.export(NUnit)).unwrap();
                 success_count += 1;
             } else if let Err(error) = feature {
+                let display_path = path.to_str().unwrap_or("[[Non UTF-8 path]]");
                 fs::write(
                     output_dir.join((*name).to_owned() + ".log"),
-                    format!("{:#}", error),
+                    format!("{}\n{:#}", display_path, error),
                 )
                 .context(format!(
                     "Error attempting to write error log for file `{}`",
