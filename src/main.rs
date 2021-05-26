@@ -1,9 +1,4 @@
-use std::{
-    env,
-    fs::{self},
-    io::Write,
-    path::Path,
-};
+use std::{env, fs, io::Write, path::Path};
 
 use anyhow::{Context, Result};
 use feature::Feature;
@@ -68,13 +63,13 @@ fn main_inner() -> Result<()> {
 
     let output_dir = match args.next() {
         Some(os_str) => Path::new(&os_str).to_owned(),
-        None => env::current_dir().context(
-            "No output file provided, and the current working \
-            directory could not be determined due to an IO error.",
-        )?,
+        None => env::current_dir()
+            .context(
+                "No output file provided, and the current working \
+                directory could not be determined due to an IO error.",
+            )?
+            .join("gherkin_output"),
     };
-    //let output_dir = args.next();
-    println!("GOT HERE");
     println!("{}", input_path);
     for entry in glob(input_path).context(format!(
         "Error evaluation paths for input pattern {}",
