@@ -10,23 +10,7 @@ use crate::Str;
 use crate::{step::Step, NUnit};
 use anyhow::{bail, Context, Result};
 
-// pub(crate) struct ParseOutcome<'a, T> {
-//     data: T,
-//     next_line: Option<GherkinLine<'a>>,
-// }
-
 type ParseOutcome<'a, T> = (T, Option<GherkinLine<'a>>);
-
-// pub(crate) fn parse<'a, T>(name: &'a str, lines: impl Iterator<Item = GherkinLine<'a>>) -> Result<(T,Option<GherkinLine<'a>>)>
-//     where
-//      T : ParseTrimmedLines<'a> {
-//     let ParseOutcome{ data, next_line } = T::from_lines(name, lines)?;
-//     Ok((data, next_line))
-// }
-
-// pub(crate) fn ok_parsed<'a, T>(data: T, next_line: Option<GherkinLine<'a>>) -> Result<ParseOutcome<'a, T>> {
-//     Ok(ParseOutcome { data, next_line })
-// }
 
 pub(crate) trait ParseTrimmedLines<'a> {
     fn from_lines(
