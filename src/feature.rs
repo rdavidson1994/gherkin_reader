@@ -623,6 +623,7 @@ impl NUnit {
             format!("@{}", literal)
         }
     }
+
     fn interpret_arg(&self, arg: &str, cs_type: CSType) -> String {
         match cs_type {
             CSType::Unknown => format!(
@@ -648,10 +649,12 @@ impl NUnit {
             }
         }
     }
+
     fn write_test_case<'a, S: AsRef<str>>(
         &'a self,
         arg_types: &'a [CSType],
         arg_strings: impl Iterator<Item = S>,
+        category: &'a str,
     ) -> String {
         let mut output = String::from("    [TestCase(");
         let mut first = true;
@@ -662,17 +665,29 @@ impl NUnit {
             output += &self.interpret_arg(arg_string.as_ref(), arg_type);
             first = false;
         }
+        if category != "" {
+            output += ", Category=\"";
+            output += category;
+            output += "\""
+        }
         output += ")]\n";
         output
     }
 }
+
 impl<'a> Export<NUnit> for ScenarioOutline<'a> {
     fn export(&self, nunit: NUnit) -> String {
         let mut output = String::new();
         let arg_types = calculate_arg_types(&self.example_blocks);
         for block in &self.example_blocks {
+            let comma_separated_tags = block.tags.join(",");
+
             for example in &block.examples {
-                let test_case = nunit.write_test_case(&arg_types, example.entries.iter());
+                let test_case = nunit.write_test_case(
+                    &arg_types,
+                    example.entries.iter(),
+                    &comma_separated_tags,
+                );
                 output += &test_case;
             }
         }
@@ -693,7 +708,7 @@ impl<'a> Export<NUnit> for ScenarioOutline<'a> {
                 .literals
                 .iter()
                 .map(|&x| pascal(x))
-                .reduce(|x, y| x + &y)
+                .reduce(|x, y| x + "___" + &y)
                 .unwrap_or(String::from("[Emtpy step text?]"));
             output += &format!(
                 "        // {kw:?}({title}(",
