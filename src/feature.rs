@@ -119,6 +119,7 @@ pub struct Feature<'a> {
     pub free_text: Vec<Str<'a>>,
     pub items: Vec<FeatureItem<'a>>,
     pub background: Option<Scenario<'a>>,
+    pub tags: Vec<Str<'a>>,
 }
 
 impl<'a> Feature<'a> {
@@ -126,27 +127,35 @@ impl<'a> Feature<'a> {
         let mut lines = input
             .lines()
             .map(|l| l.trim())
-            .filter(|l| !l.starts_with('@') && !l.is_empty() && !l.starts_with('#'));
-        let first_line = lines.next().context("Feature file was empty.")?;
-        let parsed_line = GherkinLine::from_str(first_line);
-        let title = {
-            if let GherkinLine::BeginGroup(GroupingKeyword::Feature, title) = parsed_line {
-                title
-            } else {
-                bail!(
-                    "Expected to read line of the form \
-                    `Feature: <feature name>`, but got this: {:?}",
-                    parsed_line
-                );
+            .filter(|l| !l.is_empty() && !l.starts_with('#'));
+        let mut tags = vec![];
+        let mut line = lines.next().context("Feature file was empty.")?;
+        let title = loop {
+            let parsed_line = GherkinLine::from_str(line);
+            match parsed_line {
+                GherkinLine::Tags(gherkin_tags) => tags.extend(gherkin_tags.into_iter()),
+                GherkinLine::BeginGroup(GroupingKeyword::Feature, title) => {
+                    break title;
+                }
+                _ => bail!(
+                    "Unexpected content while parsing feature tags\n{tags}\n\
+                    Expected `Feature: feature_name` or `@tag_1[...@tag_n]`",
+                    tags = line.clone()
+                ),
             }
+            line = match lines.next() {
+                Some(l) => l,
+                None => bail!("Unexpected EOF while reading feature tags."),
+            };
         };
-        let (feature, next_line) = Self::from_str_lines(title, lines)?;
+        let (mut feature, next_line) = Self::from_str_lines(title, lines)?;
         if let Some(line) = next_line {
             bail!(
                 "Finished parsing content, but then encountered this unexpected line: {:?}",
                 line
             );
         }
+        feature.tags = tags;
         Ok(feature)
     }
 }
@@ -219,6 +228,8 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
         // First, read free text description
         let mut background = None;
         let mut free_text = vec![];
+
+        let mut tags: Vec<&str> = vec![];
         let (mut group_kw, mut group_name) = loop {
             match lines
                 .next()
@@ -227,9 +238,7 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
                 GherkinLine::FreeText(text) => {
                     free_text.push(text);
                 }
-                GherkinLine::Tags(tags) => {
-                    bail!("Tags aren't supported yet: {:?}", tags);
-                }
+                GherkinLine::Tags(new_tags) => tags.extend(new_tags.into_iter()),
                 GherkinLine::BeginGroup(group_kw, group_name) => {
                     break (group_kw, group_name);
                 }
@@ -243,15 +252,16 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
             }
         };
         let mut items = vec![];
-
+        let mut item_tags: Vec<&'a str> = vec![];
         loop {
             let line = match group_kw {
                 GroupingKeyword::ScenarioOutline => {
-                    let (data, next_line) = ScenarioOutline::from_lines(group_name, &mut lines)
+                    let (mut data, next_line) = ScenarioOutline::from_lines(group_name, &mut lines)
                         .context(format!(
                             "Failed to parse Scenario Outline `{}` in feature {}`",
                             group_name, name
                         ))?;
+                    data.tags.extend(tags.drain(..));
                     items.push(FeatureItem::Outline(data));
                     next_line
                 }
@@ -288,9 +298,7 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
 
             if let Some(line) = line {
                 match line {
-                    GherkinLine::Tags(_) => {
-                        bail!("Tags aren't supported yet: {:?}", line)
-                    }
+                    GherkinLine::Tags(new_tags) => item_tags.extend(new_tags.into_iter()),
                     GherkinLine::BeginGroup(k, n) => {
                         group_kw = k;
                         group_name = n;
@@ -307,13 +315,15 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
             }
         }
 
-        // Then, read items
-
+        // tags are empty because syntactically,
+        // the tags are *outside* the feature.
+        // The calling context has them cached and can populate them.
         let feature = Feature {
             name,
             free_text,
             items,
             background,
+            tags: vec![],
         };
 
         Ok((feature, None))
@@ -324,6 +334,7 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
 pub struct Scenario<'a> {
     pub name: Str<'a>,
     pub steps: Vec<Step<'a>>,
+    pub tags: Vec<&'a str>,
 }
 
 impl<'a> ParseTrimmedLines<'a> for Scenario<'a> {
@@ -348,7 +359,11 @@ impl<'a> ParseTrimmedLines<'a> for Scenario<'a> {
             }
         };
 
-        let scenario = Scenario { name, steps };
+        let scenario = Scenario {
+            name,
+            steps,
+            tags: vec![],
+        };
 
         Ok((scenario, terminating_line))
     }
@@ -371,6 +386,7 @@ impl<'a> Export<NUnit> for Scenario<'a> {
 pub struct ExampleBlock<'a> {
     examples: Vec<ExampleRow<'a>>,
     labels: ExampleRow<'a>,
+    tags: Vec<&'a str>,
 }
 
 impl<'a> ParseTrimmedLines<'a> for ExampleBlock<'a> {
@@ -407,7 +423,7 @@ impl<'a> ParseTrimmedLines<'a> for ExampleBlock<'a> {
         let terminator = loop {
             match lines.next() {
                 Some(line) => match line {
-                    BeginGroup(_, _) => {
+                    BeginGroup(_, _) | Tags(_) => {
                         break Some(line);
                     }
                     ExampleEntry(row) => {
@@ -440,7 +456,13 @@ impl<'a> ParseTrimmedLines<'a> for ExampleBlock<'a> {
             }
         };
 
-        let example_block = ExampleBlock { examples, labels };
+        // Tags begin as empty since they are specified in the enclosing scenario.
+        // The scenario itself will push appropriate tags in from its buffer.
+        let example_block = ExampleBlock {
+            examples,
+            labels,
+            tags: vec![],
+        };
         Ok((example_block, terminator))
     }
 }
@@ -450,6 +472,7 @@ pub struct ScenarioOutline<'a> {
     pub name: Str<'a>,
     pub steps: Vec<Step<'a>>,
     pub example_blocks: Vec<ExampleBlock<'a>>,
+    pub tags: Vec<&'a str>,
 }
 
 impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
@@ -463,7 +486,6 @@ impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
         use GherkinLine::*;
 
         let mut steps = vec![];
-
         let line_after_steps = loop {
             match lines.next() {
                 Some(StepLine(kw, step_text)) => {
@@ -474,7 +496,7 @@ impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
                     steps.push(step);
                 }
                 Some(tag_line @ Tags(_)) => {
-                    bail!("Tags like `{:?}` aren't supported yet", tag_line)
+                    break tag_line;
                 }
                 Some(group_line @ BeginGroup(_, _)) => {
                     break group_line;
@@ -490,22 +512,34 @@ impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
             }
         };
 
+        let mut tags = vec![];
         let mut line = line_after_steps;
         let mut example_blocks = vec![];
 
         let terminating_line = loop {
             match line {
-                tag_line @ Tags(_) => {
-                    bail!("Tags like `{:?}` aren't supported yet", tag_line);
+                Tags(new_tags) => {
+                    tags.extend(new_tags.into_iter());
+                    if let Some(next_line) = lines.next() {
+                        line = next_line;
+                    } else {
+                        match tags.last() {
+                            Some(last_tag) => {
+                                bail!("Unexpected EOF after reading tag @{}", last_tag)
+                            }
+                            None => bail!("Unexpected EOF after reading tag marker '@'"),
+                        }
+                    }
                 }
                 BeginGroup(group_keyword, group_name) => match group_keyword {
                     GroupingKeyword::Examples => {
-                        let (example_block, next_line) =
+                        let (mut example_block, next_line) =
                             ExampleBlock::from_lines(group_name, &mut lines).context(format!(
                                 "Failed to parse example block #{} in Scenario Outline `{}`",
                                 example_blocks.len() + 1,
                                 name
                             ))?;
+                        example_block.tags.extend(tags.drain(..));
                         example_blocks.push(example_block);
                         if let Some(next_line) = next_line {
                             line = next_line;
@@ -527,6 +561,7 @@ impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
             name,
             steps,
             example_blocks,
+            tags: vec![],
         };
 
         Ok((outline, terminating_line))

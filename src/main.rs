@@ -7,6 +7,8 @@ use glob::glob;
 mod feature;
 mod step;
 
+mod tags;
+
 /// Convert gherkin files to .cs source files.
 #[derive(FromArgs)]
 struct Arguments {

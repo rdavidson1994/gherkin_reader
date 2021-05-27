@@ -1,9 +1,5 @@
-use std::{iter::Skip, str::Split};
-
-use crate::{feature::ParseStr, Str};
+use crate::{feature::ParseStr, tags::GherkinTags, Str};
 use anyhow::{bail, Context, Result};
-
-type TagIterator<'a> = Skip<Split<'a, char>>;
 
 #[derive(Debug, Clone, Copy)]
 pub enum GroupingKeyword {
@@ -18,9 +14,9 @@ pub enum GroupingKeyword {
     // Rule, // not supported yet
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum GherkinLine<'a> {
-    Tags(TagIterator<'a>),
+    Tags(GherkinTags<'a>),
     StepLine(StepKeyword, &'a str),
     BeginGroup(GroupingKeyword, &'a str),
     FreeText(&'a str),
@@ -34,6 +30,7 @@ impl<'a> GherkinLine<'a> {
         input = input.trim();
         if let Some((keyword, title)) = input.split_once(':') {
             let keyword = keyword.trim();
+            let title = title.trim();
             match keyword {
                 "Scenario" | "Example " => return BeginGroup(Scenario, title),
                 "Examples" | "Scenarios" => return BeginGroup(Examples, title),
@@ -51,6 +48,7 @@ impl<'a> GherkinLine<'a> {
         if let Some((keyword, title)) = input.split_once(' ') {
             use StepKeyword::*;
             let keyword = keyword.trim();
+            let title = title.trim();
             match keyword {
                 "Given" => return StepLine(Given, title),
                 "When" => return StepLine(When, title),
@@ -64,8 +62,8 @@ impl<'a> GherkinLine<'a> {
             }
         }
 
-        if input.starts_with('@') {
-            return Tags(input.split('@').skip(1));
+        if let Some(("", after_at_sign)) = input.split_once('@') {
+            return Tags(GherkinTags::new(after_at_sign));
         }
 
         if input.starts_with('|') {
