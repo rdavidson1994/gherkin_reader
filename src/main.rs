@@ -1,9 +1,9 @@
 use crate::export::Export;
-use anyhow::{Context, Result};
-use argh::FromArgs;
+use anyhow::{bail, Context, Result};
+use argh::{Flag, FromArgValue, FromArgs};
 use feature::Feature;
 use glob::glob;
-use std::{env, fs, io::Write, path::PathBuf};
+use std::{env, fs, io::Write, path::PathBuf, str::FromStr};
 
 use crate::export::NUnit;
 
@@ -16,6 +16,24 @@ mod tags;
 #[cfg(test)]
 mod tests;
 
+#[derive(PartialEq, Debug)]
+enum ExportFormat {
+    NUnit,
+    JSON,
+}
+
+impl FromStr for ExportFormat {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "nunit" => Ok(ExportFormat::NUnit),
+            "json" => Ok(ExportFormat::JSON),
+            _ => bail!("Inavlid export format {}", s),
+        }
+    }
+}
+
 /// Convert gherkin files to .cs source files.
 #[derive(FromArgs)]
 struct Arguments {
@@ -27,9 +45,11 @@ struct Arguments {
     /// Defaults to ${cwd}/gherkin_output
     #[argh(positional)]
     output_path: Option<PathBuf>,
-}
 
-type Str<'a> = &'a str;
+    /// which export format to use (default nunit)
+    #[argh(option, default = "ExportFormat::NUnit")]
+    export_format: ExportFormat,
+}
 
 fn main() {
     let args = argh::from_env();
@@ -82,12 +102,22 @@ fn main_inner(args: Arguments) -> Result<()> {
 
             let feature = Feature::from_str(content);
             if let Ok(feature) = feature {
+                let extension = match args.export_format {
+                    ExportFormat::NUnit => ".cs",
+                    ExportFormat::JSON => ".json",
+                };
                 let mut w = fs::OpenOptions::new()
                     .create(true)
                     .write(true)
-                    .open(output_dir.join((*name).to_owned() + ".cs"))
+                    .open(output_dir.join((*name).to_owned() + extension))
                     .context(format!("Failed to create output file for {}", name))?;
-                write!(w, "{}", feature.export(NUnit)).unwrap();
+
+                let content = match args.export_format {
+                    ExportFormat::NUnit => feature.export(NUnit),
+                    ExportFormat::JSON => serde_json::to_string_pretty(&feature)?,
+                };
+                //w.write(content.as_bytes())?;
+                write!(w, "{}", content)?;
                 success_count += 1;
             } else if let Err(error) = feature {
                 let display_path = path.to_str().unwrap_or("[[Non UTF-8 path]]");

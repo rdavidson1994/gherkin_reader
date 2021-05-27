@@ -1,7 +1,4 @@
-use crate::{
-    feature::{ExampleBlock, ScenarioOutline},
-    Str,
-};
+use crate::feature::{ExampleBlock, ScenarioOutline};
 
 pub trait Export<T> {
     fn export(&self, export_format: T) -> String;
@@ -54,7 +51,7 @@ impl CSType {
     }
 }
 pub struct NUnit;
-pub fn camel(input: Str) -> String {
+pub fn camel(input: &str) -> String {
     let mut output = String::new();
     let mut iterator = input.split(|c: char| !c.is_alphanumeric());
     let first_word = if let Some(first_word) = iterator.next() {
@@ -74,7 +71,7 @@ pub fn camel(input: Str) -> String {
     output
 }
 
-pub fn pascal(input: Str) -> String {
+pub fn pascal(input: &str) -> String {
     let mut output = String::new();
     for word in input.split(|c: char| !c.is_alphanumeric()) {
         let mut chars = word.chars();

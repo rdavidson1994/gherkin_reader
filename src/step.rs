@@ -1,19 +1,21 @@
 use crate::{
     feature::ParseStr,
     gherkin_tags::{FeatureItemKeyword, StepKeyword},
-    Str,
 };
 use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Step<'a> {
     pub(crate) keyword: StepKeyword,
-    pub(crate) literals: Vec<Str<'a>>,
-    pub(crate) variables: Vec<Str<'a>>,
+    #[serde(borrow)]
+    pub(crate) literals: Vec<&'a str>,
+    #[serde(borrow)]
+    pub(crate) variables: Vec<&'a str>,
 }
 
 impl<'a> Step<'a> {
-    pub fn new(keyword: StepKeyword, input: Str<'a>) -> Result<Step<'a>> {
+    pub fn new(keyword: StepKeyword, input: &'a str) -> Result<Step<'a>> {
         let mut remaining_text = input.trim();
         let mut literals = vec![];
         let mut variables = vec![];

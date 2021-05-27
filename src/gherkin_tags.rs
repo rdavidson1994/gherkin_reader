@@ -1,5 +1,6 @@
-use crate::{tags::GherkinTags, Str};
+use crate::tags::GherkinTags;
 use anyhow::{bail, Result};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub(crate) enum GherkinLine<'a> {
@@ -74,7 +75,7 @@ pub enum GroupingKeyword {
     // Rule, // not supported yet
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum StepKeyword {
     Given,
     When,
@@ -85,7 +86,7 @@ pub enum StepKeyword {
 }
 
 impl StepKeyword {
-    pub fn from_str(input: Str) -> Result<StepKeyword> {
+    pub fn from_str(input: &str) -> Result<StepKeyword> {
         use StepKeyword::*;
         match input {
         "Given" => Ok(Given),
@@ -99,7 +100,7 @@ impl StepKeyword {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum FeatureItemKeyword {
     Scenario,
     ScenarioOutline,

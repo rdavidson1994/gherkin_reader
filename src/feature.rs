@@ -1,3 +1,5 @@
+use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::str;
 
@@ -5,9 +7,7 @@ use crate::export::pascal;
 use crate::export::Export;
 use crate::gherkin_tags::GherkinLine;
 use crate::gherkin_tags::GroupingKeyword;
-use crate::Str;
 use crate::{step::Step, NUnit};
-use anyhow::{bail, Context, Result};
 
 type ParseOutcome<'a, T> = (T, Option<GherkinLine<'a>>);
 
@@ -36,13 +36,13 @@ pub trait ParseStr<'a> {
         Self: Sized;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ExampleRow<'a> {
     pub entries: Vec<Cow<'a, str>>,
 }
 
 impl<'a> ExampleRow<'a> {
-    pub fn from_str(input: Str<'a>) -> Result<Self> {
+    pub fn from_str(input: &'a str) -> Result<Self> {
         // Record whether any escapes occurred, so that we
         // can go back and replace them.
         let mut ever_escaped = false;
@@ -96,13 +96,13 @@ impl<'a> ExampleRow<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Feature<'a> {
-    pub name: Str<'a>,
-    pub free_text: Vec<Str<'a>>,
+    pub name: &'a str,
+    pub free_text: Vec<&'a str>,
     pub items: Vec<FeatureItem<'a>>,
     pub background: Option<Scenario<'a>>,
-    pub tags: Vec<Str<'a>>,
+    pub tags: Vec<&'a str>,
 }
 
 impl<'a> Feature<'a> {
@@ -161,10 +161,10 @@ impl<'a> Export<NUnit> for Feature<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum FeatureItem<'a> {
-    Bare(Scenario<'a>),
-    Outline(ScenarioOutline<'a>),
+    Bare(#[serde(borrow)] Scenario<'a>),
+    Outline(#[serde(borrow)] ScenarioOutline<'a>),
 }
 
 impl<'a> ParseGherkin<'a> for Feature<'a> {
@@ -280,10 +280,11 @@ impl<'a> ParseGherkin<'a> for Feature<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Scenario<'a> {
-    pub name: Str<'a>,
+    pub name: &'a str,
     pub steps: Vec<Step<'a>>,
+    #[serde(borrow)]
     pub tags: Vec<&'a str>,
 }
 
@@ -332,10 +333,11 @@ impl<'a> Export<NUnit> for Scenario<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ExampleBlock<'a> {
     pub examples: Vec<ExampleRow<'a>>,
     pub labels: ExampleRow<'a>,
+    #[serde(borrow)]
     pub tags: Vec<&'a str>,
 }
 
@@ -417,11 +419,12 @@ impl<'a> ParseGherkin<'a> for ExampleBlock<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ScenarioOutline<'a> {
-    pub name: Str<'a>,
+    pub name: &'a str,
     pub steps: Vec<Step<'a>>,
     pub example_blocks: Vec<ExampleBlock<'a>>,
+    #[serde(borrow)]
     pub tags: Vec<&'a str>,
 }
 
