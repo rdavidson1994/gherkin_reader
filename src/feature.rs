@@ -10,14 +10,23 @@ use crate::Str;
 use crate::{step::Step, NUnit};
 use anyhow::{bail, Context, Result};
 
-pub(crate) struct ParseOutcome<'a, T> {
-    data: T,
-    next_line: Option<GherkinLine<'a>>,
-}
+// pub(crate) struct ParseOutcome<'a, T> {
+//     data: T,
+//     next_line: Option<GherkinLine<'a>>,
+// }
 
-fn ok_parsed<'a, T>(data: T, next_line: Option<GherkinLine<'a>>) -> Result<ParseOutcome<'a, T>> {
-    Ok(ParseOutcome { data, next_line })
-}
+type ParseOutcome<'a, T> = (T, Option<GherkinLine<'a>>);
+
+// pub(crate) fn parse<'a, T>(name: &'a str, lines: impl Iterator<Item = GherkinLine<'a>>) -> Result<(T,Option<GherkinLine<'a>>)>
+//     where
+//      T : ParseTrimmedLines<'a> {
+//     let ParseOutcome{ data, next_line } = T::from_lines(name, lines)?;
+//     Ok((data, next_line))
+// }
+
+// pub(crate) fn ok_parsed<'a, T>(data: T, next_line: Option<GherkinLine<'a>>) -> Result<ParseOutcome<'a, T>> {
+//     Ok(ParseOutcome { data, next_line })
+// }
 
 pub(crate) trait ParseTrimmedLines<'a> {
     fn from_lines(
@@ -131,14 +140,14 @@ impl<'a> Feature<'a> {
                 );
             }
         };
-        let parse_outcome = Self::from_str_lines(title, lines)?;
-        if let Some(line) = parse_outcome.next_line {
+        let (feature, next_line) = Self::from_str_lines(title, lines)?;
+        if let Some(line) = next_line {
             bail!(
                 "Finished parsing content, but then encountered this unexpected line: {:?}",
                 line
             );
         }
-        Ok(parse_outcome.data)
+        Ok(feature)
     }
 }
 
@@ -238,8 +247,8 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
         loop {
             let line = match group_kw {
                 GroupingKeyword::ScenarioOutline => {
-                    let ParseOutcome { data, next_line } =
-                        ScenarioOutline::from_lines(group_name, &mut lines).context(format!(
+                    let (data, next_line) = ScenarioOutline::from_lines(group_name, &mut lines)
+                        .context(format!(
                             "Failed to parse Scenario Outline `{}` in feature {}`",
                             group_name, name
                         ))?;
@@ -247,23 +256,21 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
                     next_line
                 }
                 GroupingKeyword::Scenario => {
-                    let ParseOutcome { data, next_line } =
-                        Scenario::from_lines(group_name, &mut lines)?;
-                    items.push(FeatureItem::Bare(data));
+                    let (scenario, next_line) = Scenario::from_lines(group_name, &mut lines)?;
+                    items.push(FeatureItem::Bare(scenario));
                     next_line
                 }
                 GroupingKeyword::Background => {
-                    let ParseOutcome { data, next_line } =
-                        Scenario::from_lines(group_name, &mut lines)?;
+                    let (new_background, next_line) = Scenario::from_lines(group_name, &mut lines)?;
                     background = match background {
-                        None => Some(data),
+                        None => Some(new_background),
                         Some(existing) => {
                             bail!(
                                 "While parsing Feature `{feature}`, encountered \
                                 Background `{background} - but another background \
                                 (`{existing}`) was already declared for that feature.",
                                 feature = name,
-                                background = data.name,
+                                background = new_background.name,
                                 existing = existing.name
                             )
                         }
@@ -309,7 +316,7 @@ impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
             background,
         };
 
-        ok_parsed(feature, None)
+        Ok((feature, None))
     }
 }
 
@@ -343,10 +350,7 @@ impl<'a> ParseTrimmedLines<'a> for Scenario<'a> {
 
         let scenario = Scenario { name, steps };
 
-        Ok(ParseOutcome {
-            data: scenario,
-            next_line: terminating_line,
-        })
+        Ok((scenario, terminating_line))
     }
 }
 
@@ -437,7 +441,7 @@ impl<'a> ParseTrimmedLines<'a> for ExampleBlock<'a> {
         };
 
         let example_block = ExampleBlock { examples, labels };
-        ok_parsed(example_block, terminator)
+        Ok((example_block, terminator))
     }
 }
 
@@ -496,13 +500,13 @@ impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
                 }
                 BeginGroup(group_keyword, group_name) => match group_keyword {
                     GroupingKeyword::Examples => {
-                        let ParseOutcome { data, next_line } =
+                        let (example_block, next_line) =
                             ExampleBlock::from_lines(group_name, &mut lines).context(format!(
                                 "Failed to parse example block #{} in Scenario Outline `{}`",
                                 example_blocks.len() + 1,
                                 name
                             ))?;
-                        example_blocks.push(data);
+                        example_blocks.push(example_block);
                         if let Some(next_line) = next_line {
                             line = next_line;
                         } else {
@@ -525,7 +529,7 @@ impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
             example_blocks,
         };
 
-        ok_parsed(outline, terminating_line)
+        Ok((outline, terminating_line))
     }
 }
 
