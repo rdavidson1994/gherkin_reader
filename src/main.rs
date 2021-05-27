@@ -1,12 +1,16 @@
-use std::{env, fs, io::Write, path::PathBuf};
-
+use crate::export::Export;
 use anyhow::{Context, Result};
 use argh::FromArgs;
 use feature::Feature;
 use glob::glob;
-mod feature;
-mod step;
+use std::{env, fs, io::Write, path::PathBuf};
 
+use crate::export::NUnit;
+
+mod export;
+mod feature;
+mod gherkin_tags;
+mod step;
 mod tags;
 
 /// Convert gherkin files to .cs source files.
@@ -23,77 +27,6 @@ struct Arguments {
 }
 
 type Str<'a> = &'a str;
-
-pub trait Language {
-    type ArgTypes;
-}
-
-pub trait TestFramework {
-    type Lang: Language;
-}
-
-pub struct CSharp;
-
-#[derive(PartialEq, Eq, Clone, Copy)]
-pub enum CSType {
-    Unknown,
-    Bool,
-    Int64,
-    Double,
-    String,
-}
-
-impl CSType {
-    fn lowest_common_type(self, other: CSType) -> CSType {
-        use CSType::*;
-        match (self, other) {
-            // Undetermined types remain undetermined until
-            // more info is available
-            (Unknown, Unknown) => Unknown,
-            // Any new information replaces an undetermined type
-            (Unknown, x) | (x, Unknown) => x,
-            // Calculated types remain in place unless contradicted
-            (x, y) if x == y => x,
-            // If a contradiction occurs, we default back to string
-            _ => String,
-        }
-    }
-    fn from(input: &str) -> CSType {
-        if input.parse::<i64>().is_ok() {
-            CSType::Int64
-        } else if input.parse::<f64>().is_ok() {
-            CSType::Double
-        } else if input.parse::<bool>().is_ok() {
-            CSType::Bool
-        } else {
-            CSType::String
-        }
-    }
-
-    fn to_str(self) -> &'static str {
-        match self {
-            CSType::Unknown => "object",
-            CSType::Bool => "bool",
-            CSType::Int64 => "long",
-            CSType::Double => "double",
-            CSType::String => "string",
-        }
-    }
-}
-
-impl Language for CSharp {
-    type ArgTypes = CSType;
-}
-
-impl TestFramework for NUnit {
-    type Lang = CSharp;
-}
-
-pub struct NUnit;
-
-pub trait Export<T> {
-    fn export(&self, export_format: T) -> String;
-}
 
 fn main() {
     let args = argh::from_env();
