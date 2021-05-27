@@ -160,25 +160,25 @@ impl<'a> Feature<'a> {
     }
 }
 
-// fn camel(input: Str) -> String {
-//     let mut output = String::new();
-//     let mut iterator = input.split(|c: char| !c.is_alphanumeric());
-//     let first_word = if let Some(first_word) = iterator.next() {
-//         first_word
-//     } else {
-//         return String::from("");
-//     };
-//     output += first_word;
-//     for word in iterator {
-//         let mut chars = word.chars();
-//         if let Some(first_char) = chars.next() {
-//             let first_upper = first_char.to_uppercase();
-//             output.extend(first_upper);
-//             output.extend(chars);
-//         }
-//     }
-//     output
-// }
+fn camel(input: Str) -> String {
+    let mut output = String::new();
+    let mut iterator = input.split(|c: char| !c.is_alphanumeric());
+    let first_word = if let Some(first_word) = iterator.next() {
+        first_word
+    } else {
+        return String::from("");
+    };
+    output += first_word;
+    for word in iterator {
+        let mut chars = word.chars();
+        if let Some(first_char) = chars.next() {
+            let first_upper = first_char.to_uppercase();
+            output.extend(first_upper);
+            output.extend(chars);
+        }
+    }
+    output
+}
 
 fn pascal(input: Str) -> String {
     let mut output = String::new();
@@ -698,7 +698,7 @@ impl<'a> Export<NUnit> for ScenarioOutline<'a> {
             }
             output += arg_types.get(i).unwrap_or(&CSType::String).to_str();
             output += " ";
-            output += &pascal(arg);
+            output += &camel(arg);
         }
         output += ")\n";
         output += "    {\n";
@@ -719,7 +719,7 @@ impl<'a> Export<NUnit> for ScenarioOutline<'a> {
                 if i != 0 {
                     output += ", "
                 }
-                output += &pascal(variable);
+                output += &camel(variable);
             }
             output += "));\n";
         }
