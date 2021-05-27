@@ -94,11 +94,12 @@ impl<'a> Step<'a> {
                 literals.push(literal);
                 let (variable, text) = remaining_text.split_once('>').with_context(|| {
                     format!(
-                        "Step the following step: \n\
+                        "The following step: \n\
                         `{step}`\n\
                         ends with an unterminated variable expression{}\n\
                         `{expression}`",
-                        step = input, expression=remaining_text
+                        step = input,
+                        expression = remaining_text
                     )
                 })?;
                 remaining_text = text;
@@ -145,7 +146,7 @@ impl StepKeyword {
 pub enum FeatureItemKeyword {
     Scenario,
     ScenarioOutline,
-    Background
+    Background,
 }
 
 impl<'a> ParseStr<'a> for FeatureItemKeyword {

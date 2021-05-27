@@ -109,7 +109,7 @@ pub struct Feature<'a> {
     pub name: Str<'a>,
     pub free_text: Vec<Str<'a>>,
     pub items: Vec<FeatureItem<'a>>,
-    pub background: Option<Scenario<'a>>
+    pub background: Option<Scenario<'a>>,
 }
 
 impl<'a> Feature<'a> {
