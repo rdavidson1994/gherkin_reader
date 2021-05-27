@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 
 type ParseOutcome<'a, T> = (T, Option<GherkinLine<'a>>);
 
-pub(crate) trait ParseTrimmedLines<'a> {
+pub(crate) trait ParseGherkin<'a> {
     fn from_lines(
         title: &'a str,
         lines: impl Iterator<Item = GherkinLine<'a>>,
@@ -167,7 +167,7 @@ pub enum FeatureItem<'a> {
     Outline(ScenarioOutline<'a>),
 }
 
-impl<'a> ParseTrimmedLines<'a> for Feature<'a> {
+impl<'a> ParseGherkin<'a> for Feature<'a> {
     fn from_lines(
         name: &'a str,
         mut lines: impl Iterator<Item = GherkinLine<'a>>,
@@ -287,7 +287,7 @@ pub struct Scenario<'a> {
     pub tags: Vec<&'a str>,
 }
 
-impl<'a> ParseTrimmedLines<'a> for Scenario<'a> {
+impl<'a> ParseGherkin<'a> for Scenario<'a> {
     fn from_lines(
         name: &'a str,
         mut lines: impl Iterator<Item = GherkinLine<'a>>,
@@ -339,7 +339,7 @@ pub struct ExampleBlock<'a> {
     pub tags: Vec<&'a str>,
 }
 
-impl<'a> ParseTrimmedLines<'a> for ExampleBlock<'a> {
+impl<'a> ParseGherkin<'a> for ExampleBlock<'a> {
     fn from_lines(
         title: &'a str,
         mut lines: impl Iterator<Item = GherkinLine<'a>>,
@@ -425,7 +425,7 @@ pub struct ScenarioOutline<'a> {
     pub tags: Vec<&'a str>,
 }
 
-impl<'a> ParseTrimmedLines<'a> for ScenarioOutline<'a> {
+impl<'a> ParseGherkin<'a> for ScenarioOutline<'a> {
     fn from_lines(
         name: &'a str,
         mut lines: impl Iterator<Item = GherkinLine<'a>>,
