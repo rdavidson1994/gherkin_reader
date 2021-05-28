@@ -1,9 +1,9 @@
 use crate::export::Export;
-use anyhow::{bail, Context, Result};
-use argh::FromArgs;
+use anyhow::{Context, Result};
+use clap::{crate_version, AppSettings, Clap};
 use feature::Feature;
 use glob::glob;
-use std::{env, fs, io::Write, path::PathBuf, str::FromStr};
+use std::{fs, io::Write, path::PathBuf};
 
 use crate::export::NUnit;
 
@@ -16,42 +16,60 @@ mod tags;
 #[cfg(test)]
 mod tests;
 
+#[derive(Debug, Clap)]
 enum ExportFormat {
+    #[clap(name = "nunit")]
     NUnit,
     JSON,
 }
 
-impl FromStr for ExportFormat {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        use ExportFormat::*;
-        match s {
-            "nunit" => Ok(NUnit),
-            "json" => Ok(JSON),
-            _ => bail!("Inavlid export format {}", s),
-        }
-    }
+#[derive(Debug, Clap)]
+enum ErrorBehavior {
+    /// Creates a .log file for each failed parse, and sends it to
+    /// the directory indicated by [output_path]
+    Log,
+
+    /// Ignores failed parses
+    Silent,
+
+    /// Outputs error messages to stdout
+    Stdout,
+
+    /// Outputs error messages to stderr
+    Stderr,
 }
 
-/// Convert gherkin files to .cs source files.
-#[derive(FromArgs)]
+#[derive(Debug, Clap)]
+#[clap(
+    about="A tool to convert gherkin feature files",
+    version=crate_version!(),
+    setting(AppSettings::ArgRequiredElseHelp)
+)]
 struct Arguments {
-    /// pattern to match feature files.
-    /// For example, src/tests/*/features/*.feature
-    #[argh(positional)]
+    /// Input path (use wildcards for directory contents)
+    #[clap(parse(from_str))]
     input_pattern: String,
-    /// destination for output source files and logs.
-    /// Defaults to ${cwd}/gherkin_output
-    #[argh(positional)]
-    output_path: Option<PathBuf>,
 
-    /// which export format to use. NUnit (default) or JSON.
-    #[argh(option)]
-    export_format: Option<ExportFormat>,
+    /// Destination for output source files and logs.
+    #[clap(parse(from_os_str), default_value(".\\gherkin_output"))]
+    output_path: PathBuf,
+
+    /// Output format for converted feature files
+    #[clap(short = 'f', long = "format")]
+    #[clap(arg_enum)]
+    #[clap(default_value("nunit"))]
+    export_format: ExportFormat,
+
+    /// What the do with error messages. If set to `log`, log
+    /// files are created in <output_path>
+    #[clap(short, long)]
+    #[clap(arg_enum)]
+    #[clap(default_value("log"))]
+    error_behavior: ErrorBehavior,
 }
 
 fn main() {
-    let args = argh::from_env();
+    let args = Arguments::parse();
     let outcome = main_inner(args).context("Fatal error");
     if let Err(e) = outcome {
         eprintln!("{:#}", e);
@@ -62,16 +80,8 @@ fn main_inner(args: Arguments) -> Result<()> {
     let mut success_count = 0;
     let mut failure_count = 0;
     let input_path = args.input_pattern;
-    let export_format = args.export_format.unwrap_or(ExportFormat::NUnit);
-    let output_dir = match args.output_path {
-        Some(path) => path,
-        None => env::current_dir()
-            .context(
-                "No output file provided, and the current working \
-                directory could not be determined due to an IO error.",
-            )?
-            .join("gherkin_output"),
-    };
+    let export_format = args.export_format;
+    let output_dir = args.output_path;
     fs::create_dir_all(&output_dir).context(format!(
         "Could not create output directory: {:?}",
         &output_dir
@@ -121,14 +131,26 @@ fn main_inner(args: Arguments) -> Result<()> {
             } else if let Err(error) = feature {
                 let display_path = path.to_str().unwrap_or("[[Non UTF-8 path]]");
                 let display_error = format!("{:#}", error).replace(':', ":\n");
-                fs::write(
-                    output_dir.join((*name).to_owned() + ".log"),
-                    format!("{}\n\n{}", display_path, display_error),
-                )
-                .context(format!(
-                    "Error attempting to write error log for file `{}`",
-                    name
-                ))?;
+                let error_text = format!("Error parsing {}: {}", display_path, display_error);
+                match args.error_behavior {
+                    ErrorBehavior::Log => {
+                        fs::write(output_dir.join((*name).to_owned() + ".log"), error_text)
+                            .context(format!(
+                                "Error attempting to write error log for file `{}`",
+                                name
+                            ))?;
+                    }
+                    ErrorBehavior::Silent => {
+                        // deaddove.jpg
+                    }
+                    ErrorBehavior::Stdout => {
+                        println!("{}", error_text)
+                    }
+                    ErrorBehavior::Stderr => {
+                        eprintln!("{}", error_text)
+                    }
+                }
+
                 failure_count += 1;
             }
         }

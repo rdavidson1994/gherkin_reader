@@ -3,13 +3,6 @@ use crate::feature::{ExampleBlock, ScenarioOutline};
 pub trait Export<T> {
     fn export(&self, export_format: T) -> String;
 }
-pub trait Language {
-    type ArgTypes;
-}
-
-pub trait TestFramework {
-    type Lang: Language;
-}
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum CSType {
