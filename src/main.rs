@@ -1,6 +1,6 @@
 use crate::export::Export;
 use anyhow::{bail, Context, Result};
-use argh::{Flag, FromArgValue, FromArgs};
+use argh::FromArgs;
 use feature::Feature;
 use glob::glob;
 use std::{env, fs, io::Write, path::PathBuf, str::FromStr};
@@ -16,7 +16,6 @@ mod tags;
 #[cfg(test)]
 mod tests;
 
-#[derive(PartialEq, Debug)]
 enum ExportFormat {
     NUnit,
     JSON,
@@ -24,11 +23,11 @@ enum ExportFormat {
 
 impl FromStr for ExportFormat {
     type Err = anyhow::Error;
-
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use ExportFormat::*;
         match s {
-            "nunit" => Ok(ExportFormat::NUnit),
-            "json" => Ok(ExportFormat::JSON),
+            "nunit" => Ok(NUnit),
+            "json" => Ok(JSON),
             _ => bail!("Inavlid export format {}", s),
         }
     }
@@ -46,9 +45,9 @@ struct Arguments {
     #[argh(positional)]
     output_path: Option<PathBuf>,
 
-    /// which export format to use (default nunit)
-    #[argh(option, default = "ExportFormat::NUnit")]
-    export_format: ExportFormat,
+    /// which export format to use. NUnit (default) or JSON.
+    #[argh(option)]
+    export_format: Option<ExportFormat>,
 }
 
 fn main() {
@@ -63,7 +62,7 @@ fn main_inner(args: Arguments) -> Result<()> {
     let mut success_count = 0;
     let mut failure_count = 0;
     let input_path = args.input_pattern;
-
+    let export_format = args.export_format.unwrap_or(ExportFormat::NUnit);
     let output_dir = match args.output_path {
         Some(path) => path,
         None => env::current_dir()
@@ -102,7 +101,7 @@ fn main_inner(args: Arguments) -> Result<()> {
 
             let feature = Feature::from_str(content);
             if let Ok(feature) = feature {
-                let extension = match args.export_format {
+                let extension = match export_format {
                     ExportFormat::NUnit => ".cs",
                     ExportFormat::JSON => ".json",
                 };
@@ -112,7 +111,7 @@ fn main_inner(args: Arguments) -> Result<()> {
                     .open(output_dir.join((*name).to_owned() + extension))
                     .context(format!("Failed to create output file for {}", name))?;
 
-                let content = match args.export_format {
+                let content = match export_format {
                     ExportFormat::NUnit => feature.export(NUnit),
                     ExportFormat::JSON => serde_json::to_string_pretty(&feature)?,
                 };
