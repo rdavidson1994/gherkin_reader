@@ -228,6 +228,8 @@ impl<'a> Export<NUnit> for ScenarioOutline<'a> {
             }
             output += "));\n";
         }
+        
+        output += "        Assert.Fail(\"Unimplemented test\");";
         output += "\n";
         output += "    }\n";
         output
